@@ -2,4 +2,4 @@
 
 Framework Feature Map can be found below:
 
-https://mm.tt/1881135301?t=aMVoFrDVpL
+https://www.mindmeister.com/users/channel/66897140
