@@ -20,6 +20,7 @@ class DataAnalytics:
         #return 'Tables \n' + '\n'.join(self.db.keys())
         return repr(self.explore())
 
+    @staticmethod
     def wd():
         return os.path.abspath(os.getcwd())
     # Explore: View tables in database
@@ -132,16 +133,17 @@ class DataAnalytics:
         if not agg_funcs:
             return self.context.groupby(cols, as_index=False).size()
         
-    def sqlCxn(self,server,db,UID,pw=None):
+    def sqlCxn(self,driver,server,db,UID,pw=None):
         if not pw:
             pw = UID
         return pyodbc.connect(
-                'DRIVER={SQL Server};SERVER=' + server + 
+                'DRIVER={' + driver + '};SERVER=' + server + 
                 ';DATABASE=' + db + 
                 '; UID = ' + UID + 
                 '; PWD = ' + UID + 'Trusted_Connection=yes')
 
     def importSQL(self,cxn, table=None, query=None, open=True,tblName=None):
+
         if not tblName:
             tblName = table
         if not query:
@@ -149,3 +151,12 @@ class DataAnalytics:
             # Query into dataframe
 
         self.add(tblName,pd.io.sql.read_sql(query, cxn))
+
+    def importFile(self, tblName, filename, sep):
+        self.add(tblName, pd.read_csv(filename,sep = sep))
+    
+    @staticmethod
+    def available_drivers():
+        drivers = pyodbc.drivers()
+        for driver in drivers:
+            print(driver)
