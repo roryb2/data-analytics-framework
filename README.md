@@ -1,4 +1,4 @@
-# data-analytics-framework DEVELOPMENT
+# data-analytics-framework [DEVELOPMENT]
 
 The Data Analytics Framework is designed to simplify the process and toolset by which data analytics can be designed and implemented.
 
