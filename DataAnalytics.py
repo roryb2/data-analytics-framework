@@ -152,8 +152,20 @@ class DataAnalytics:
 
         self.add(tblName,pd.io.sql.read_sql(query, cxn))
 
-    def importFile(self, tblName, filename, sep):
+    def importFile(self, filename, sep, tblName=None):
+        if not tblName:
+            tblName = filename
+        
         self.add(tblName, pd.read_csv(filename,sep = sep))
+
+    def importExcel(self, filename, sheet=None, tblName=None):
+        if not tblName:
+            tblName = filename
+        
+        if not sheet:
+            self.add(tblName, pd.read_excel(filename, engine = 'openpyxl'))
+        
+        self.add(tblName, pd.read_excel(filename, sheet_name = sheet, engine = 'openpyxl'))
     
     @staticmethod
     def available_drivers():
