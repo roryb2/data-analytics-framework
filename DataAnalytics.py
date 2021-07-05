@@ -6,10 +6,10 @@ import os
 import msaccessdb
 
 class DataAnalytics:
-    csv = 'csv';mdb = 'mdb';txt = 'txt';sql = 'sql'
+    csv = 'csv';mdb = 'mdb';txt = 'txt';sql = 'sql'; data_format = '.das'
 
     def __init__(self):
-        self.db = {}
+        self.db = self.loadProject()
         self.context = None
         self.tblName = None
     
@@ -23,13 +23,28 @@ class DataAnalytics:
     @staticmethod
     def wd():
         return os.path.abspath(os.getcwd())
+
     # Explore: View tables in database
     def explore(self):
         return pd.DataFrame(list(self.db.keys()),columns=['Table Name'])
 
+    def loadProject(self):
+        tmp_dict = {}
+        for file in os.listdir():
+            if file.endswith(self.data_format):
+                tmp_dict[os.path.splitext(file)[0]] = pd.read_feather(file)
+        return tmp_dict
+
+    def saveall(self):
+        for k in self.db:
+            self.db[k].to_feather(k + self.data_format)
+            print('\'{}\' was saved to \'{}\''.format(k,self.wd() + k + self.data_format))
+
     # Add: Add table to database
     def add(self, tblName, df, open=True):
-        self.db[tblName] = df
+        filename = tblName + self.data_format
+        df.to_feather(filename)
+        self.db[tblName] = filename
         if open:
             self.open(tblName)
     
@@ -158,13 +173,10 @@ class DataAnalytics:
         
         self.add(tblName, pd.read_csv(filename,sep = sep))
 
-    def importExcel(self, filename, sheet=None, tblName=None):
+    def importExcel(self, filename, sheet=0, tblName=None):
         if not tblName:
-            tblName = filename
-        
-        if not sheet:
-            self.add(tblName, pd.read_excel(filename, engine = 'openpyxl'))
-        
+            tblName = os.path.basename(filename)
+     
         self.add(tblName, pd.read_excel(filename, sheet_name = sheet, engine = 'openpyxl'))
     
     @staticmethod
