@@ -2,6 +2,10 @@
 
 The Data Analytics Framework is designed to simplify the process and toolset by which data analytics can be designed and implemented.
 
+
+## Latest Updates
+2021-07-04 :: Save state added.
+
 ## How to use
 All functionality for use of the framework are in DataAnalytics.py .
 
