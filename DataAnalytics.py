@@ -39,14 +39,14 @@ class DataAnalytics:
 
     def saveall(self):
         for k in self.db:
-            self.db[k].to_feather(k + self.data_format)
+            self.db[k].reset_index().to_feather(k + self.data_format)
             print('\'{}\' was saved to \'{}\''.format(k,self.wd() + k + self.data_format))
 
     # Add: Add table to database
     def add(self, tblName, df, open=True):
         filename = tblName + self.data_format
-        df.to_feather(filename)
-        self.db[tblName] = filename
+        df.reset_index().to_feather(filename)
+        self.db[tblName] = df
         if open:
             self.open(tblName)
     
