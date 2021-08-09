@@ -1,6 +1,4 @@
 import pandas as pd
-import numpy as np
-import pickle
 import pyodbc
 import os
 import msaccessdb
@@ -180,6 +178,12 @@ class DataAnalytics:
             tblName = os.path.basename(filename)
      
         self.add(tblName, pd.read_excel(filename, sheet_name = sheet, engine = 'openpyxl'))
+
+    def addCol(self, eqn):
+        self.context.apply(eqn, axis=1)
+
+    def join(self, tblName, right, how='inner', on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
+        self.add(tblName, self.context.merge(right, how, on, left_on, right_on, left_index, right_index, sort, suffixes, copy, indicator, validate))
     
     @staticmethod
     def available_drivers():
