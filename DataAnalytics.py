@@ -130,7 +130,7 @@ class DataAnalytics:
     # SQL_CREATE_STATEMENT_FROM_DATAFRAME(SOURCE, TARGET)
     # SOURCE: source dataframe
     # TARGET: target table to be created in database
-
+    def SQL_CREATE_STATEMENT_FROM_DATAFRAME(self, SOURCE, TARGET):
         sql_text = pd.io.sql.get_schema(SOURCE, TARGET)   
         return sql_text
 
@@ -140,8 +140,8 @@ class DataAnalytics:
             sql_texts.append('INSERT INTO '+TARGET+' ('+ str(', '.join(SOURCE.columns))+ ') VALUES '+ str(tuple(row.values)))        
         return sql_texts
 
-    def addCol(self, colName, val):
-        self.context[colName] = self.context.eval(val)
+    def addCol(self, colName, eqn):
+        self.context[colName] = self.context.apply(eqn, axis=1)
         return self.context
 
     def summBy(self,cols,agg_funcs=None):
