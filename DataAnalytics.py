@@ -37,13 +37,13 @@ class DataAnalytics:
 
     def saveall(self):
         for k in self.db:
-            self.db[k].reset_index().to_feather(k + self.data_format)
+            self.db[k].reset_index(drop=True).to_feather(k + self.data_format)
             print('\'{}\' was saved to \'{}\''.format(k,self.wd() + k + self.data_format))
 
     # Add: Add table to database
     def add(self, tblName, df, open=True):
         filename = tblName + self.data_format
-        df.reset_index().to_feather(filename)
+        df.reset_index(drop=True).to_feather(filename)
         self.db[tblName] = df
         if open:
             self.open(tblName)
@@ -63,7 +63,7 @@ class DataAnalytics:
         try:
             self.context = self.db[tblName]
             self.tblName = tblName
-            return self.db[tblName]
+            return self.context
         except KeyError:
             print("Table \'{}\' does not exist.".format(tblName))
     
@@ -72,15 +72,14 @@ class DataAnalytics:
         self.context = None
     
     # Extract: Create a separate table from open table
-    def extract(self, tblName, condition=None, open=True):
-        if(condition != None):
-            self.add(tblName,self.filter(condition))
+    def extract(self, tblName, filter=None, open=True):
+        if(filter != None):
+            self.add(tblName,self.filter(filter))
         else:
             self.add(tblName,self.context)
         if open:
             self.open(tblName)
             
-
     # Filter: Define a series of conditions or criteria and apply to dataframe for results
     def filter(self, condition):
         return self.context.query(condition)
@@ -125,8 +124,6 @@ class DataAnalytics:
         msaccessdb.create(db_file)
         return db_file
 
-    def SQL_CREATE_STATEMENT_FROM_DATAFRAME(self, SOURCE, TARGET):
-
     # SQL_CREATE_STATEMENT_FROM_DATAFRAME(SOURCE, TARGET)
     # SOURCE: source dataframe
     # TARGET: target table to be created in database
@@ -147,6 +144,10 @@ class DataAnalytics:
     def summBy(self,cols,agg_funcs=None):
         if not agg_funcs:
             return self.context.groupby(cols, as_index=False).size()
+        tmp = self.context.groupby(cols).agg(agg_funcs)
+        tmp.columns = ["_".join(x) for x in tmp.columns.ravel()]
+        tmp.reset_index(drop=True)
+        return tmp
         
     def sqlCxn(self,driver,server,db,UID,pw=None):
         if not pw:
@@ -178,9 +179,6 @@ class DataAnalytics:
             tblName = os.path.basename(filename)
      
         self.add(tblName, pd.read_excel(filename, sheet_name = sheet, engine = 'openpyxl'))
-
-    def addCol(self, eqn):
-        self.context.apply(eqn, axis=1)
 
     def join(self, tblName, right, how='inner', on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
         self.add(tblName, self.context.merge(right, how, on, left_on, right_on, left_index, right_index, sort, suffixes, copy, indicator, validate))
