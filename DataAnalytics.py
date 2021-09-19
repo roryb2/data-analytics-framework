@@ -10,8 +10,8 @@ class DataAnalytics:
 
     def __init__(self):
         self.db = self.loadProject()
-        self.context = None
         self.tblName = None
+        self.context = None
     
     def __str__(self):
         return str(self.db.keys())
@@ -61,8 +61,8 @@ class DataAnalytics:
     # Open: Open table in database
     def open(self, tblName):
         try:
-            self.context = self.db[tblName]
             self.tblName = tblName
+            self.context = self.db[self.tblName]
             return self.context
         except KeyError:
             print("Table \'{}\' does not exist.".format(tblName))
@@ -70,6 +70,7 @@ class DataAnalytics:
     # Close: Close the current table
     def close(self):
         self.context = None
+        self.tblName = None
     
     # Extract: Create a separate table from open table
     def extract(self, tblName, filter=None, open=True):
@@ -138,16 +139,24 @@ class DataAnalytics:
         return sql_texts
 
     def addCol(self, colName, eqn):
-        self.context[colName] = self.context.apply(eqn, axis=1)
-        return self.context
+        self.db[self.tblName][colName] = self.db[self.tblName].apply(eqn, axis=1)
+        # self.context = self.db[self.tblName]
+        return self.open(self.tblName)
 
-    def summBy(self,cols,agg_funcs=None):
+    def renameCol(self, **kwargs):
+        self.db[self.tblName] = self.db[self.tblName].rename(**kwargs)
+        return self.open(self.tblName)
+
+    def summBy(self,tblName,cols,agg_funcs=None,open=True):
         if not agg_funcs:
-            return self.context.groupby(cols, as_index=False).size()
-        tmp = self.context.groupby(cols).agg(agg_funcs)
-        tmp.columns = ["_".join(x) for x in tmp.columns.ravel()]
-        tmp.reset_index(drop=True)
-        return tmp
+            tmp = self.context.groupby(cols, as_index=False).size()
+        else:
+            tmp = self.context.groupby(cols).agg(agg_funcs)
+            tmp.columns = ["_".join(x) for x in tmp.columns.ravel()]
+            tmp = tmp.reset_index()
+        self.add(tblName, tmp)
+        if open:
+            return self.open(tblName)
         
     def sqlCxn(self,driver,server,db,UID,pw=None):
         if not pw:
@@ -182,7 +191,7 @@ class DataAnalytics:
 
     def join(self, tblName, right, how='inner', on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
         self.add(tblName, self.context.merge(right, how, on, left_on, right_on, left_index, right_index, sort, suffixes, copy, indicator, validate))
-    
+
     @staticmethod
     def available_drivers():
         drivers = pyodbc.drivers()
