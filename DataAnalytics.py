@@ -38,7 +38,7 @@ class DataAnalytics:
     def saveall(self):
         for k in self.db:
             self.db[k].reset_index(drop=True).to_feather(k + self.data_format)
-            print('\'{}\' was saved to \'{}\''.format(k,self.wd() + k + self.data_format))
+            # print('\'{}\' was saved to \'{}\''.format(k,self.wd() + k + self.data_format))
 
     # Add: Add table to database
     def add(self, tblName, df, open=True):
@@ -50,11 +50,13 @@ class DataAnalytics:
     
     # Delete: Delete table from database
     def delete(self, tblName):
-        if self.context == self.db[tblName]:
+        if self.tblName == tblName:
             print("Cannot delete open table '{}'".format(tblName))
         else:
             try:
                 del self.db[tblName]
+                if os.path.exists(tblName + self.data_format):
+                    os.remove(tblName + self.data_format)
             except KeyError:
                 print("Table \'{}\' does not exist.".format(tblName))
 
@@ -73,44 +75,54 @@ class DataAnalytics:
         self.tblName = None
     
     # Extract: Create a separate table from open table
-    def extract(self, tblName, filter=None, open=True):
-        if(filter != None):
-            self.add(tblName,self.filter(filter))
+    def extract(self, tblName, filter=None, open=True, cols = None):
+        if not self.context.empty:
+            if cols:
+                self.context = self.context[cols]
+            if(filter != None):
+                self.add(tblName,self.filter(filter))
         else:
             self.add(tblName,self.context)
         if open:
             self.open(tblName)
             
+    def append(self, tblName, tbl2):
+        self.add(tblName,self.context.append(tbl2))
+        
     # Filter: Define a series of conditions or criteria and apply to dataframe for results
     def filter(self, condition):
-        return self.context.query(condition)
+        if not self.context.empty:
+            return self.context.query(condition)
+        else:
+            return self.context
 
     # Export: Export dataframe values to a supported specific file format
     def export(self, format, filename=None):
         # Identify MS Access Drivers
         # [x for x in pyodbc.drivers() if x.startswith('Microsoft Access Driver')]
-        if filename==None:
-            filename = self.tblName
+        if not self.context.empty:
+            if filename==None:
+                filename = self.tblName
 
-        if format == self.csv:
-            self.context.to_csv(filename + '.csv',index=False)
+            if format == self.csv:
+                self.context.to_csv(filename + '.csv',index=False)
 
-        if format == self.mdb:
-            mdb_file = self.createAccessMDB(filename=filename)
-            conn = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)}; DBQ=' + mdb_file)
-            cur = conn.cursor()
-            tbl = 'new'
-            if cur.tables(table = tbl).fetchone():
-                cur.execute('DROP TABLE ' + 'new')
+            if format == self.mdb:
+                mdb_file = self.createAccessMDB(filename=filename)
+                conn = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)}; DBQ=' + mdb_file)
+                cur = conn.cursor()
+                tbl = 'new'
+                if cur.tables(table = tbl).fetchone():
+                    cur.execute('DROP TABLE ' + 'new')
 
-            cur.execute(self.SQL_CREATE_STATEMENT_FROM_DATAFRAME(self.context,tbl))
+                cur.execute(self.SQL_CREATE_STATEMENT_FROM_DATAFRAME(self.context,tbl))
 
-            for sql in self.SQL_INSERT_STATEMENT_FROM_DATAFRAME(self.context,tbl):
-                cur.execute(sql)
+                for sql in self.SQL_INSERT_STATEMENT_FROM_DATAFRAME(self.context,tbl):
+                    cur.execute(sql)
 
-            conn.commit()
-            cur.close()
-            conn.close()
+                conn.commit()
+                cur.close()
+                conn.close()
 
 
     def createAccessMDB(self, path=None, filename=None):
@@ -139,24 +151,26 @@ class DataAnalytics:
         return sql_texts
 
     def addCol(self, colName, eqn):
-        self.db[self.tblName][colName] = self.db[self.tblName].apply(eqn, axis=1)
-        # self.context = self.db[self.tblName]
-        return self.open(self.tblName)
+        if not self.context.empty:
+            self.db[self.tblName][colName] = self.db[self.tblName].apply(eqn, axis=1)
+            # self.context = self.db[self.tblName]
+            return self.open(self.tblName)
 
     def renameCol(self, **kwargs):
         self.db[self.tblName] = self.db[self.tblName].rename(**kwargs)
         return self.open(self.tblName)
 
     def summBy(self,tblName,cols,agg_funcs=None,open=True):
-        if not agg_funcs:
-            tmp = self.context.groupby(cols, as_index=False).size()
-        else:
-            tmp = self.context.groupby(cols).agg(agg_funcs)
-            tmp.columns = ["_".join(x) for x in tmp.columns.ravel()]
-            tmp = tmp.reset_index()
-        self.add(tblName, tmp)
-        if open:
-            return self.open(tblName)
+        if not self.context.empty:
+            if not agg_funcs:
+                tmp = self.context.groupby(cols, as_index=False).size()
+            else:
+                tmp = self.context.groupby(cols).agg(agg_funcs)
+                tmp.columns = ["_".join(x) for x in tmp.columns.ravel()]
+                tmp = tmp.reset_index()
+            self.add(tblName, tmp,open=open)
+            if open:
+                return self.open(tblName)
         
     def sqlCxn(self,driver,server,db,UID,pw=None):
         if not pw:
@@ -190,10 +204,11 @@ class DataAnalytics:
         self.add(tblName, pd.read_excel(filename, sheet_name = sheet, engine = 'openpyxl'))
 
     def join(self, tblName, right, how='inner', on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'), copy=True, indicator=False, validate=None):
-        self.add(tblName, self.context.merge(right, how, on, left_on, right_on, left_index, right_index, sort, suffixes, copy, indicator, validate))
+        if not self.context.empty:
+            self.add(tblName, self.context.merge(right, how, on, left_on, right_on, left_index, right_index, sort, suffixes, copy, indicator, validate))
 
     @staticmethod
-    def available_drivers():
+    def drivers():
         drivers = pyodbc.drivers()
         for driver in drivers:
             print(driver)
