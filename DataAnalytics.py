@@ -81,6 +81,8 @@ class DataAnalytics:
                 self.context = self.context[cols]
             if(filter != None):
                 self.add(tblName,self.filter(filter))
+            else:
+                self.add(tblName, self.context)
         else:
             self.add(tblName,self.context)
         if open:
