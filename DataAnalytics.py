@@ -197,7 +197,7 @@ class DataAnalytics:
                 cur.execute('DROP TABLE ' + tbl_temp)
             create_st = self.SQL_CREATE_STATEMENT_FROM_DATAFRAME(df,tbl_temp)
 
-            print(create_st)
+            # print(create_st)
 
             cur.execute(create_st)
             conn.commit()
@@ -219,15 +219,15 @@ class DataAnalytics:
             prms = ','.join(i for i in prms)
             vals = df.values.tolist()
 
-            sql = 'INSERT INTO '+tbl+' (%s)' % prms
+            sql = 'INSERT INTO '+ tbl_temp +' (%s)' % prms
             sql = sql+' VALUES (%s)' % cols
             for row in vals:
                 vals = [x if x not in ['nan',None] else '' for x in list(row)]
                 vals = [x if x not in ['NaT'] else None for x in list(vals)]
                 vals = tuple(vals)
-                print(sql)
+                # print(sql)
 
-                print(vals)
+                # print(vals)
                 cur.execute(sql,vals)
 
             conn.commit()
