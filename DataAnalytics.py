@@ -1,11 +1,84 @@
+# -------------------------------------------------------------------------------------
+# Created By: Rory Barrett
+# Created Date: 2021-12-29
+# version: 1.24
+# -------------------------------------------------------------------------------------
+
 import pandas as pd
 import pyodbc
 import os
 import msaccessdb
-
-# 
+import csv
+import re
 
 class DataAnalytics:
+    """
+    Toolkit for managing and manipulating pandas dataframes (referred to as tables).
+    Contains operations for creating analytics processes.
+
+    ...
+
+    Attributes
+    ----------
+    db : dict
+        dictionary for managing access to dataframes
+    tblName : str
+        key of dataframe currently being accessed from db
+    context : pandas.dataframe
+        dataframe currently being accessed from db
+
+    Methods
+    -------
+    wd()
+        Returns the location of the working directory
+    explore()
+        Returns a dataframe with all keys in attribute db
+    loadProject()
+        Returns a dictionary containing all key-value pairs of tablename-dataframe from the working directory
+    saveall()
+        Writes the current dataframes in attribute db to file
+    add(tblName, df, open=True)
+        Adds a new tablename-dataframe to attribute db
+    delete(tblName)
+        Removes a tablename-dataframe from attribute db
+    open(tblName)
+        "Opens" a dataframe from attribute db
+    close()
+        "Closes" the dataframe currently "open"
+    extract(tblName, filter=None, open=True, cols = None)
+        Creates new tablename-dataframe pair from dataframe currently "open"
+    append(tblName, tbl2)
+        Creates new tablename-dataframe pair by appending a dataframe to the dataframe currently "open"
+    filter(condition)
+        Apply set filter to dataframe curently "open"
+    exportFile(format, sep, filename=None)
+        Export "open" dataframe to a selected format
+    exportMDB(filename=None, tbl=None)
+        Export "open" dataframe to MDB
+    createAccessMDB(path=None, filename=None)
+        Return MDB file location for use in method exportMDB
+    SQL_CREATE_STATEMENT_FROM_DATAFRAME(SOURCE, TARGET)
+        Return string with SQL create statement for a given dataframe
+    SQL_INSERT_STATEMENT_FROM_DATAFRAME(SOURCE, TARGET)
+        Return string with SQL insert statement(s) for a given dataframe
+    addCol(colName, eqn)
+        Return dataframe with column added for supplied lambda function to dataframe currently "open"
+    renameCol(**kwargs)
+        Return dataframe with newly renamed columns from dataframe currently "open"
+    summBy(tblName,cols,agg_funcs=None,open=True)
+        Return dataframe resulting from aggregations performed on dataframe currently "open"
+    importSQL(cxn, table=None, query=None, open=True,tblName=None)
+        Creates new dataframe from provided SQL statement on a given database connection
+    importFile(filename, sep, tblName=None)
+        Creates new dataframe from a given delimited text file
+    importExcel(filename, sheet=0, tblName=None)
+        Creates new dataframe from a given excel file
+    join(tblName, right, how='inner', on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'), copy=True, indicator=False, validate=None)
+        Creates new dataframe by performing a join between a dataframe and the dataframe currently "open"
+    drivers()
+        Return a list of available database drivers
+    """
+
     csv = 'csv';mdb = 'mdb';txt = 'txt';sql = 'sql'; data_format = '.das'
 
     def __init__(self):
@@ -82,14 +155,14 @@ class DataAnalytics:
             if(filter != None):
                 self.add(tblName,self.filter(filter))
             else:
-                self.add(tblName, self.context)
+                self.add(tblName,self.context)
         else:
             self.add(tblName,self.context)
         if open:
             self.open(tblName)
             
     def append(self, tblName, tbl2):
-        self.add(tblName,self.context.append(tbl2))
+        self.add(tblName,self.context.append(tbl2, ignore_index=True))
         
     # Filter: Define a series of conditions or criteria and apply to dataframe for results
     def filter(self, condition):
@@ -99,33 +172,67 @@ class DataAnalytics:
             return self.context
 
     # Export: Export dataframe values to a supported specific file format
-    def export(self, format, filename=None):
+    def exportFile(self, format, sep, filename=None):
+        if not self.context.empty:
+            if filename==None:
+                filename = self.tblName
+
+            self.context.to_csv(filename + '.' + format, index=False, sep=sep, quoting = csv.QUOTE_ALL)
+
+    # Export MDB: Export dataframe values to MDB
+    def exportMDB(self, filename=None, tbl=None):
         # Identify MS Access Drivers
         # [x for x in pyodbc.drivers() if x.startswith('Microsoft Access Driver')]
         if not self.context.empty:
             if filename==None:
                 filename = self.tblName
 
-            if format == self.csv:
-                self.context.to_csv(filename + '.csv',index=False)
+            df = self.context
+            mdb_file = self.createAccessMDB(filename=filename)
+            conn = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)}; DBQ=' + mdb_file)
+            # conn = pyodbc.connect('DRIVER={SQL Server}; DBQ=' + mdb_file)
+            cur = conn.cursor()
+            tbl_temp = 'Reports' if not tbl else tbl
+            if cur.tables(table = tbl_temp).fetchone():
+                cur.execute('DROP TABLE ' + tbl_temp)
+            create_st = self.SQL_CREATE_STATEMENT_FROM_DATAFRAME(df,tbl_temp)
 
-            if format == self.mdb:
-                mdb_file = self.createAccessMDB(filename=filename)
-                conn = pyodbc.connect('DRIVER={Microsoft Access Driver (*.mdb, *.accdb)}; DBQ=' + mdb_file)
-                cur = conn.cursor()
-                tbl = 'new'
-                if cur.tables(table = tbl).fetchone():
-                    cur.execute('DROP TABLE ' + 'new')
+            print(create_st)
 
-                cur.execute(self.SQL_CREATE_STATEMENT_FROM_DATAFRAME(self.context,tbl))
+            cur.execute(create_st)
+            conn.commit()
 
-                for sql in self.SQL_INSERT_STATEMENT_FROM_DATAFRAME(self.context,tbl):
-                    cur.execute(sql)
+            date_cols = list(df.select_dtypes(['<M8[ns]']).columns)
 
-                conn.commit()
-                cur.close()
-                conn.close()
+            if date_cols:
+                df[date_cols] = df[date_cols].astype(str)
 
+            """
+            insert_st = self.SQL_INSERT_STATEMENT_FROM_DATAFRAME(df,tbl)
+            insert_st = [re.sub(r"\bnan\b",'NULL',ln) for ln in insert_st]
+            insert_st = [re.sub(r"\bNaT\b",'NULL',ln) for ln in insert_st]
+            insert_st = [re.sub(r"\bNone\b",'NULL',ln) for ln in insert_st]
+            """
+            cols = list(df.columns)
+            prms = ['['+r+']' for r in cols]
+            cols = ','.join('?' for i in range(len(cols)))
+            prms = ','.join(i for i in prms)
+            vals = df.values.tolist()
+
+            sql = 'INSERT INTO '+tbl+' (%s)' % prms
+            sql = sql+' VALUES (%s)' % cols
+            for row in vals:
+                vals = [x if x not in ['nan',None] else '' for x in list(row)]
+                vals = [x if x not in ['NaT'] else None for x in list(vals)]
+                vals = tuple(vals)
+                print(sql)
+
+                print(vals)
+                cur.execute(sql,vals)
+
+            conn.commit()
+            cur.close()
+            conn.close()
 
     def createAccessMDB(self, path=None, filename=None):
         ext = self.mdb
@@ -149,7 +256,8 @@ class DataAnalytics:
     def SQL_INSERT_STATEMENT_FROM_DATAFRAME(self, SOURCE, TARGET):
         sql_texts = []
         for index, row in SOURCE.iterrows():
-            sql_texts.append('INSERT INTO '+TARGET+' ('+ str(', '.join(SOURCE.columns))+ ') VALUES '+ str(tuple(row.values)))        
+            # sql_texts.append('INSERT INTO '+TARGET+' ('+ str(', '.join(SOURCE.columns))+ ') VALUES '+ str(tuple(row.values)))
+            sql_texts.append('INSERT INTO '+TARGET+' ('+ str(', '.join([re.sub('$',']',re.sub('^','[', el)) for el in list(SOURCE.columns)]))+ ') VALUES '+ str(tuple(row.values)))        
         return sql_texts
 
     def addCol(self, colName, eqn):
@@ -174,15 +282,6 @@ class DataAnalytics:
             if open:
                 return self.open(tblName)
         
-    def sqlCxn(self,driver,server,db,UID,pw=None):
-        if not pw:
-            pw = UID
-        return pyodbc.connect(
-                'DRIVER={' + driver + '};SERVER=' + server + 
-                ';DATABASE=' + db + 
-                '; UID = ' + UID + 
-                '; PWD = ' + UID + 'Trusted_Connection=yes')
-
     def importSQL(self,cxn, table=None, query=None, open=True,tblName=None):
 
         if not tblName:
